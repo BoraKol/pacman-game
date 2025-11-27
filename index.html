@@ -655,8 +655,10 @@
             this.scared = false;
             this.dead = false;
             
+            // DÜZELTME: Artık 'gameState === PLAY' kontrolünü yapmıyoruz.
+            // Sadece yönü ayarlıyoruz, oyun döngüsü başlamadan fiziksel hareket zaten olmaz.
             setTimeout(() => {
-                if(gameState === 'PLAY') this.dir = DIR.UP;
+                this.dir = DIR.UP;
             }, 1000 + Math.random() * 2000);
         }
 
