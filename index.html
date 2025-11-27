@@ -169,6 +169,26 @@
             color: #888;
             display: none;
         }
+
+        /* Mute Button */
+        #mute-btn {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: none;
+            border: 2px solid rgba(255,255,255,0.3);
+            color: rgba(255,255,255,0.7);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            font-size: 20px;
+            cursor: pointer;
+            z-index: 20;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: auto;
+        }
         
         @media (hover: none) and (pointer: coarse) {
             #mobile-hint { display: block; }
@@ -180,8 +200,11 @@
 <div id="game-container">
     <canvas id="gameCanvas"></canvas>
     
+    <!-- Mute Button -->
+    <button id="mute-btn" onclick="toggleAudio()">🔇</button>
+
     <div id="ui-layer">
-        <div class="hud-bar">
+        <div class="hud-bar" style="padding-left: 60px;"> <!-- Padding for mute btn -->
             <span id="score-display">Puan: 0</span>
             <span id="level-display">Seviye: 1</span>
         </div>
@@ -237,7 +260,7 @@
     let isFirebaseReady = false;
     let app, auth, db, currentUser;
 
-    // Toast Yardımcı Fonksiyonu
+    // Toast Helper
     function showToast(message, type = "info") {
         let bgColor = "#333";
         if (type === "success") bgColor = "linear-gradient(to right, #00b09b, #96c93d)";
@@ -246,13 +269,11 @@
 
         Toastify({
             text: message,
-            duration: 5000, 
+            duration: 3000, 
             close: true,
             gravity: "top", 
             position: "right", 
-            style: {
-                background: bgColor,
-            },
+            style: { background: bgColor },
             stopOnFocus: true 
         }).showToast();
     }
@@ -267,20 +288,8 @@
             db = getFirestore(app);
             isFirebaseReady = true;
 
-            // Anonim Giriş ve Detaylı Hata Yakalama
             signInAnonymously(auth).catch((error) => {
                 console.error("Giriş hatası:", error);
-                
-                let errorMsg = "Sunucuya bağlanılamadı.";
-                if (error.code === 'auth/operation-not-allowed') {
-                    errorMsg = "HATA: Firebase panelinde 'Anonymous' girişi KAPALI.";
-                } else if (error.code === 'auth/network-request-failed') {
-                    errorMsg = "HATA: İnternet bağlantısı yok veya domain izni verilmemiş.";
-                } else {
-                    errorMsg = `HATA: ${error.code}`;
-                }
-                
-                showToast(errorMsg, "error");
             });
 
             onAuthStateChanged(auth, (user) => {
@@ -296,23 +305,17 @@
         console.error("Config hatası:", e);
         document.getElementById('leaderboard-list').innerHTML = "<p style='color: #ff9999'>Config dosyası yüklenemedi.</p>";
     }
-    // ----------------------------------
 
-    // --- Leaderboard Logic ---
     async function refreshLeaderboard() {
         if (!isFirebaseReady || !currentUser) return;
-
         const listEl = document.getElementById('leaderboard-list');
         
         try {
-            // Zaman aşımı ile veri çekme
             const fetchPromise = getDocs(collection(db, 'leaderboard'));
             const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 5000));
-            
             const querySnapshot = await Promise.race([fetchPromise, timeoutPromise]);
             
             let scores = [];
-            
             querySnapshot.forEach((doc) => {
                 const data = doc.data();
                 if (data.name && typeof data.score === 'number') {
@@ -333,16 +336,9 @@
                     </div>
                 `).join('');
             }
-
         } catch (e) {
             console.error("Leaderboard error:", e);
-            if (e.message === "Timeout") {
-                listEl.innerHTML = '<p style="color:yellow">Bağlantı yavaş...</p>';
-            } else if (e.code === 'permission-denied') {
-                listEl.innerHTML = '<p style="color:red">Veri okuma izni yok! (Rules)</p>';
-            } else {
-                listEl.innerHTML = '<p>Yükleme hatası.</p>';
-            }
+            listEl.innerHTML = '<p>Yükleme hatası.</p>';
         }
     }
 
@@ -351,33 +347,18 @@
         let name = nameInput.value.trim();
         const saveBtn = document.getElementById('save-btn');
         
-        if (!name) {
-            showToast("Lütfen bir isim girin!", "warning");
-            return;
-        }
-
-        if (!isFirebaseReady) {
-            showToast("Firebase ayarları eksik!", "error");
-            return;
-        }
+        if (!name) { showToast("Lütfen bir isim girin!", "warning"); return; }
+        if (!isFirebaseReady) { showToast("Firebase ayarları eksik!", "error"); return; }
 
         saveBtn.innerText = "Bağlanıyor...";
         saveBtn.disabled = true;
 
         if (!currentUser) {
-            showToast("Sunucuya bağlanılıyor...", "info");
             try {
                 const userCredential = await signInAnonymously(auth);
                 currentUser = userCredential.user;
             } catch (error) {
-                console.error("Giriş başarısız:", error);
-                
-                let errorMsg = "Bağlantı hatası.";
-                if (error.code === 'auth/operation-not-allowed') {
-                    errorMsg = "HATA: Firebase'de Anonim giriş aktif değil!";
-                }
-                
-                showToast(errorMsg, "error");
+                showToast("Bağlantı hatası.", "error");
                 saveBtn.innerText = "Tekrar Dene";
                 saveBtn.disabled = false;
                 return;
@@ -387,37 +368,18 @@
         saveBtn.innerText = "Kaydediliyor...";
 
         try {
-            // Zaman aşımı (Timeout) ekle - 5 saniye
             const savePromise = addDoc(collection(db, 'leaderboard'), {
                 name: name,
                 score: score,
                 timestamp: Date.now()
             });
-            
-            const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error("Timeout")), 5000)
-            );
-
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 5000));
             await Promise.race([savePromise, timeoutPromise]);
             
             showToast("Skor başarıyla kaydedildi!", "success");
-            
-            setTimeout(() => {
-                resetGame(); 
-                refreshLeaderboard();
-            }, 1000);
-
+            setTimeout(() => { resetGame(); refreshLeaderboard(); }, 1000);
         } catch (e) {
-            console.error("Save error:", e);
-            
-            if (e.message === "Timeout") {
-                showToast("Zaman aşımı! İnternet veya Veritabanı (Rules) ayarlarını kontrol edin.", "error");
-            } else if (e.code === 'permission-denied') {
-                showToast("HATA: Veritabanına yazma izni yok! (Firebase Rules ayarını yapın)", "error");
-            } else {
-                showToast("Kaydetme hatası: " + e.code, "error");
-            }
-            
+            showToast("Kaydetme hatası.", "error");
             saveBtn.innerText = "Tekrar Dene";
             saveBtn.disabled = false;
         }
@@ -427,6 +389,120 @@
         if (!text) return "";
         return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
+
+    // --- SOUND MANAGER (Web Audio API) ---
+    class SoundManager {
+        constructor() {
+            this.ctx = null;
+            this.masterGain = null;
+            this.enabled = false;
+        }
+
+        init() {
+            if (!this.ctx) {
+                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                this.masterGain = this.ctx.createGain();
+                this.masterGain.connect(this.ctx.destination);
+                this.masterGain.gain.value = 0.3; // Genel ses seviyesi
+                this.enabled = true;
+                this.updateButton();
+            } else if (this.ctx.state === 'suspended') {
+                this.ctx.resume();
+            }
+        }
+
+        toggle() {
+            if (!this.ctx) {
+                this.init();
+            } else {
+                this.enabled = !this.enabled;
+                if(this.enabled) this.ctx.resume();
+                else this.ctx.suspend();
+                this.updateButton();
+            }
+        }
+
+        updateButton() {
+            const btn = document.getElementById('mute-btn');
+            btn.innerText = this.enabled ? '🔊' : '🔇';
+        }
+
+        // Helper: Play a simple oscillator tone
+        playTone(freq, type, duration, startTime = 0) {
+            if (!this.enabled || !this.ctx) return;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime + startTime);
+            gain.gain.setValueAtTime(0.1, this.ctx.currentTime + startTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + startTime + duration);
+            
+            osc.connect(gain);
+            gain.connect(this.masterGain);
+            osc.start(this.ctx.currentTime + startTime);
+            osc.stop(this.ctx.currentTime + startTime + duration);
+        }
+
+        playWaka() {
+            if (!this.enabled || !this.ctx) return;
+            // Waka-Waka: Kısa, periyodik değişen frekanslar
+            const now = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(200, now);
+            osc.frequency.linearRampToValueAtTime(400, now + 0.1);
+            osc.frequency.linearRampToValueAtTime(200, now + 0.2);
+            
+            gain.gain.setValueAtTime(0.1, now);
+            gain.gain.linearRampToValueAtTime(0, now + 0.2);
+            
+            osc.connect(gain);
+            gain.connect(this.masterGain);
+            osc.start(now);
+            osc.stop(now + 0.2);
+        }
+
+        playEatGhost() {
+            if (!this.enabled || !this.ctx) return;
+            // High pitched blip
+            this.playTone(800, 'square', 0.1);
+            this.playTone(1200, 'square', 0.1, 0.1);
+        }
+
+        playIntro() {
+            if (!this.enabled || !this.ctx) return;
+            // Simple arpeggio
+            const notes = [261, 523, 392, 349, 329, 293, 261]; // C4, C5, G4...
+            notes.forEach((freq, i) => {
+                this.playTone(freq, 'square', 0.15, i * 0.15);
+            });
+        }
+
+        playDeath() {
+            if (!this.enabled || !this.ctx) return;
+            // Downward sweep
+            const now = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(500, now);
+            osc.frequency.exponentialRampToValueAtTime(50, now + 1.0);
+            
+            gain.gain.setValueAtTime(0.2, now);
+            gain.gain.linearRampToValueAtTime(0, now + 1.0);
+            
+            osc.connect(gain);
+            gain.connect(this.masterGain);
+            osc.start(now);
+            osc.stop(now + 1.0);
+        }
+    }
+
+    const soundManager = new SoundManager();
+    window.toggleAudio = () => soundManager.toggle();
 
     // --- Game Logic ---
     const canvas = document.getElementById('gameCanvas');
@@ -655,8 +731,6 @@
             this.scared = false;
             this.dead = false;
             
-            // DÜZELTME: Artık 'gameState === PLAY' kontrolünü yapmıyoruz.
-            // Sadece yönü ayarlıyoruz, oyun döngüsü başlamadan fiziksel hareket zaten olmaz.
             setTimeout(() => {
                 this.dir = DIR.UP;
             }, 1000 + Math.random() * 2000);
@@ -796,6 +870,7 @@
 
     // Global Functions for HTML Access
     window.startGame = function() {
+        soundManager.init(); // Initialize audio context on user gesture
         score = 0;
         lives = 3;
         levelIndex = 0;
@@ -833,6 +908,7 @@
         let touchStartX = 0;
         let touchStartY = 0;
         document.addEventListener('touchstart', e => {
+            soundManager.init(); // Initialize audio on touch too
             if (e.changedTouches && e.changedTouches.length > 0 && e.changedTouches[0]) {
                 touchStartX = e.changedTouches[0].screenX;
                 touchStartY = e.changedTouches[0].screenY;
@@ -940,6 +1016,8 @@
         document.getElementById('level-title').innerText = `Seviye ${levelIndex + 1}`;
         document.getElementById('level-screen').classList.remove('hidden');
         
+        soundManager.playIntro(); // Play Intro Sound
+
         pacman.reset(pacman.gridPos.x, pacman.gridPos.y);
         ghosts.forEach(g => g.reset());
 
@@ -1004,6 +1082,7 @@
             if (tile.type === 2) {
                 score += 10;
                 tile.active = false;
+                soundManager.playWaka(); // Play Waka
             } else if (tile.type === 3) {
                 score += 50;
                 tile.active = false;
@@ -1034,17 +1113,22 @@
     }
 
     function handleDeath() {
+        soundManager.playDeath(); // Play Death
         lives--;
         document.getElementById('lives-display').innerText = `Can: ${lives}`;
         
+        // Oyun döngüsünü geçici olarak durdur
+        gameState = 'RESPAWN'; 
+
         if (lives <= 0) {
-            gameState = 'GAMEOVER';
-            document.getElementById('final-score').innerText = `Puan: ${score}`;
-            document.getElementById('game-over-screen').classList.remove('hidden');
-        } else {
-            gameState = 'LEVEL_TRANSITION'; 
             setTimeout(() => {
-                pacman.reset(pacman.gridPos.x, pacman.gridPos.y); 
+                gameState = 'GAMEOVER';
+                document.getElementById('final-score').innerText = `Puan: ${score}`;
+                document.getElementById('game-over-screen').classList.remove('hidden');
+            }, 1000);
+        } else {
+            // Can varsa pozisyonları sıfırla ama ekranı gösterme
+            setTimeout(() => {
                 let pStart = {x: 1, y: 1};
                 const layout = LEVEL_LAYOUTS[levelIndex];
                 if (layout) {
@@ -1057,6 +1141,8 @@
                 }
                 pacman.reset(pStart.x, pStart.y);
                 ghosts.forEach(g => g.reset());
+                
+                // Oyunu direkt başlat (startLevel() çağırmadan)
                 gameState = 'PLAY';
             }, 1500);
         }
@@ -1091,6 +1177,7 @@
                     g.dead = true;
                     g.scared = false;
                     score += 200;
+                    soundManager.playEatGhost(); // Play Eat Ghost
                     g.reset(); 
                 } else {
                     handleDeath();
