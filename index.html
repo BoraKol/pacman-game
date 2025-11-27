@@ -246,7 +246,7 @@
 
         Toastify({
             text: message,
-            duration: 3000,
+            duration: 5000, 
             close: true,
             gravity: "top", 
             position: "right", 
@@ -267,10 +267,20 @@
             db = getFirestore(app);
             isFirebaseReady = true;
 
-            // Anonim Giriş
+            // Anonim Giriş ve Detaylı Hata Yakalama
             signInAnonymously(auth).catch((error) => {
                 console.error("Giriş hatası:", error);
-                showToast("Sunucuya bağlanılamadı", "error");
+                
+                let errorMsg = "Sunucuya bağlanılamadı.";
+                if (error.code === 'auth/operation-not-allowed') {
+                    errorMsg = "HATA: Firebase panelinde 'Anonymous' girişi KAPALI.";
+                } else if (error.code === 'auth/network-request-failed') {
+                    errorMsg = "HATA: İnternet bağlantısı yok veya domain izni verilmemiş.";
+                } else {
+                    errorMsg = `HATA: ${error.code}`;
+                }
+                
+                showToast(errorMsg, "error");
             });
 
             onAuthStateChanged(auth, (user) => {
@@ -284,7 +294,7 @@
         }
     } catch (e) {
         console.error("Config hatası:", e);
-        document.getElementById('leaderboard-list').innerHTML = "<p style='color: #ff9999'>Ayarlar yüklenemedi.</p>";
+        document.getElementById('leaderboard-list').innerHTML = "<p style='color: #ff9999'>Config dosyası yüklenemedi.</p>";
     }
     // ----------------------------------
 
@@ -295,7 +305,12 @@
         const listEl = document.getElementById('leaderboard-list');
         
         try {
-            const querySnapshot = await getDocs(collection(db, 'leaderboard'));
+            // Zaman aşımı ile veri çekme
+            const fetchPromise = getDocs(collection(db, 'leaderboard'));
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 5000));
+            
+            const querySnapshot = await Promise.race([fetchPromise, timeoutPromise]);
+            
             let scores = [];
             
             querySnapshot.forEach((doc) => {
@@ -305,10 +320,7 @@
                 }
             });
 
-            // Büyükten küçüğe sırala
             scores.sort((a, b) => b.score - a.score);
-            
-            // İlk 10
             scores = scores.slice(0, 10);
 
             if (scores.length === 0) {
@@ -324,7 +336,13 @@
 
         } catch (e) {
             console.error("Leaderboard error:", e);
-            listEl.innerHTML = '<p>Bağlantı hatası.</p>';
+            if (e.message === "Timeout") {
+                listEl.innerHTML = '<p style="color:yellow">Bağlantı yavaş...</p>';
+            } else if (e.code === 'permission-denied') {
+                listEl.innerHTML = '<p style="color:red">Veri okuma izni yok! (Rules)</p>';
+            } else {
+                listEl.innerHTML = '<p>Yükleme hatası.</p>';
+            }
         }
     }
 
@@ -346,16 +364,20 @@
         saveBtn.innerText = "Bağlanıyor...";
         saveBtn.disabled = true;
 
-        // Kullanıcı oturumu yoksa (yeni açıldıysa veya bağlantı koptuysa)
         if (!currentUser) {
-            showToast("Sunucuya bağlanılıyor, lütfen bekleyin...", "info");
+            showToast("Sunucuya bağlanılıyor...", "info");
             try {
-                // Girişi tekrar dene veya bekle
                 const userCredential = await signInAnonymously(auth);
                 currentUser = userCredential.user;
             } catch (error) {
                 console.error("Giriş başarısız:", error);
-                showToast("Sunucu bağlantısı kurulamadı. İnternetinizi kontrol edin.", "error");
+                
+                let errorMsg = "Bağlantı hatası.";
+                if (error.code === 'auth/operation-not-allowed') {
+                    errorMsg = "HATA: Firebase'de Anonim giriş aktif değil!";
+                }
+                
+                showToast(errorMsg, "error");
                 saveBtn.innerText = "Tekrar Dene";
                 saveBtn.disabled = false;
                 return;
@@ -365,11 +387,18 @@
         saveBtn.innerText = "Kaydediliyor...";
 
         try {
-            await addDoc(collection(db, 'leaderboard'), {
+            // Zaman aşımı (Timeout) ekle - 5 saniye
+            const savePromise = addDoc(collection(db, 'leaderboard'), {
                 name: name,
                 score: score,
                 timestamp: Date.now()
             });
+            
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error("Timeout")), 5000)
+            );
+
+            await Promise.race([savePromise, timeoutPromise]);
             
             showToast("Skor başarıyla kaydedildi!", "success");
             
@@ -380,7 +409,15 @@
 
         } catch (e) {
             console.error("Save error:", e);
-            showToast("Kaydetme hatası. İzinleri kontrol edin.", "error");
+            
+            if (e.message === "Timeout") {
+                showToast("Zaman aşımı! İnternet veya Veritabanı (Rules) ayarlarını kontrol edin.", "error");
+            } else if (e.code === 'permission-denied') {
+                showToast("HATA: Veritabanına yazma izni yok! (Firebase Rules ayarını yapın)", "error");
+            } else {
+                showToast("Kaydetme hatası: " + e.code, "error");
+            }
+            
             saveBtn.innerText = "Tekrar Dene";
             saveBtn.disabled = false;
         }
