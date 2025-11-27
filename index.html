@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Retro Pac-Man</title>
+    <!-- Toastify CSS -->
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
     <style>
         body {
             background-color: #111;
@@ -102,6 +104,12 @@
 
         .btn:active {
             transform: scale(0.95);
+        }
+
+        .btn:disabled {
+            background-color: #888;
+            cursor: not-allowed;
+            transform: none;
         }
 
         .hidden {
@@ -209,12 +217,15 @@
         <div id="score-input-container">
             <p>Skorunu Kaydet:</p>
             <input type="text" id="player-name" placeholder="Adın (Max 10 krk)" maxlength="10">
-            <button class="btn" onclick="submitScore()">Kaydet</button>
+            <button class="btn" id="save-btn" onclick="submitScore()">Kaydet</button>
         </div>
         
         <button class="btn" style="background: #ccc; margin-top: 10px; font-size: 16px;" onclick="resetGame()">Kaydetmeden Geç</button>
     </div>
 </div>
+
+<!-- Toastify JS -->
+<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
@@ -226,8 +237,27 @@
     let isFirebaseReady = false;
     let app, auth, db, currentUser;
 
+    // Toast Yardımcı Fonksiyonu
+    function showToast(message, type = "info") {
+        let bgColor = "#333";
+        if (type === "success") bgColor = "linear-gradient(to right, #00b09b, #96c93d)";
+        if (type === "error") bgColor = "linear-gradient(to right, #ff5f6d, #ffc371)";
+        if (type === "warning") bgColor = "linear-gradient(to right, #f8b500, #fceabb)";
+
+        Toastify({
+            text: message,
+            duration: 3000,
+            close: true,
+            gravity: "top", 
+            position: "right", 
+            style: {
+                background: bgColor,
+            },
+            stopOnFocus: true 
+        }).showToast();
+    }
+
     try {
-        // Hosting'e yüklediğinizde 'firebase-config.js' dosyası yanındaki klasörde olmalı.
         const module = await import('./firebase-config.js');
         firebaseConfig = module.firebaseConfig;
         
@@ -237,21 +267,24 @@
             db = getFirestore(app);
             isFirebaseReady = true;
 
-            // Anonim Giriş Yap
+            // Anonim Giriş
             signInAnonymously(auth).catch((error) => {
                 console.error("Giriş hatası:", error);
+                showToast("Sunucuya bağlanılamadı", "error");
             });
 
             onAuthStateChanged(auth, (user) => {
                 if (user) {
                     currentUser = user;
                     refreshLeaderboard();
+                } else {
+                    currentUser = null;
                 }
             });
         }
     } catch (e) {
-        console.error("Firebase Config yüklenemedi. 'firebase-config.js' dosyasını kontrol edin.", e);
-        document.getElementById('leaderboard-list').innerHTML = "<p style='color: #ff9999'>Config dosyası bulunamadı.</p>";
+        console.error("Config hatası:", e);
+        document.getElementById('leaderboard-list').innerHTML = "<p style='color: #ff9999'>Ayarlar yüklenemedi.</p>";
     }
     // ----------------------------------
 
@@ -275,7 +308,7 @@
             // Büyükten küçüğe sırala
             scores.sort((a, b) => b.score - a.score);
             
-            // İlk 10'u al
+            // İlk 10
             scores = scores.slice(0, 10);
 
             if (scores.length === 0) {
@@ -290,7 +323,7 @@
             }
 
         } catch (e) {
-            console.error("Leaderboard fetch error:", e);
+            console.error("Leaderboard error:", e);
             listEl.innerHTML = '<p>Bağlantı hatası.</p>';
         }
     }
@@ -298,26 +331,38 @@
     window.submitScore = async function() {
         const nameInput = document.getElementById('player-name');
         let name = nameInput.value.trim();
+        const saveBtn = document.getElementById('save-btn');
         
         if (!name) {
-            alert("Lütfen bir isim girin!");
+            showToast("Lütfen bir isim girin!", "warning");
             return;
         }
 
         if (!isFirebaseReady) {
-            alert("Firebase ayarları eksik veya yüklenemedi.");
+            showToast("Firebase ayarları eksik!", "error");
             return;
         }
 
+        saveBtn.innerText = "Bağlanıyor...";
+        saveBtn.disabled = true;
+
+        // Kullanıcı oturumu yoksa (yeni açıldıysa veya bağlantı koptuysa)
         if (!currentUser) {
-            alert("Bağlantı bekleniyor...");
-            return;
+            showToast("Sunucuya bağlanılıyor, lütfen bekleyin...", "info");
+            try {
+                // Girişi tekrar dene veya bekle
+                const userCredential = await signInAnonymously(auth);
+                currentUser = userCredential.user;
+            } catch (error) {
+                console.error("Giriş başarısız:", error);
+                showToast("Sunucu bağlantısı kurulamadı. İnternetinizi kontrol edin.", "error");
+                saveBtn.innerText = "Tekrar Dene";
+                saveBtn.disabled = false;
+                return;
+            }
         }
 
-        const btn = document.querySelector('#game-over-screen .btn');
-        const originalText = btn.innerText;
-        btn.innerText = "Kaydediliyor...";
-        btn.disabled = true;
+        saveBtn.innerText = "Kaydediliyor...";
 
         try {
             await addDoc(collection(db, 'leaderboard'), {
@@ -326,14 +371,18 @@
                 timestamp: Date.now()
             });
             
-            resetGame(); 
-            refreshLeaderboard(); 
+            showToast("Skor başarıyla kaydedildi!", "success");
+            
+            setTimeout(() => {
+                resetGame(); 
+                refreshLeaderboard();
+            }, 1000);
 
         } catch (e) {
             console.error("Save error:", e);
-            alert("Skor kaydedilemedi. (İzin hatası olabilir, Console'u kontrol et)");
-            btn.innerText = originalText;
-            btn.disabled = false;
+            showToast("Kaydetme hatası. İzinleri kontrol edin.", "error");
+            saveBtn.innerText = "Tekrar Dene";
+            saveBtn.disabled = false;
         }
     }
 
@@ -347,7 +396,7 @@
     const ctx = canvas.getContext('2d');
 
     // Game State
-    let gameState = 'START'; // START, PLAY, LEVEL_TRANSITION, GAMEOVER
+    let gameState = 'START'; 
     let score = 0;
     let lives = 3;
     let levelIndex = 0;
@@ -726,7 +775,7 @@
         refreshLeaderboard();
         
         // Reset inputs
-        const btn = document.querySelector('#game-over-screen .btn');
+        const btn = document.getElementById('save-btn');
         if(btn) {
              btn.innerText = "Kaydet";
              btn.disabled = false;
