@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Retro Pac-Man</title>
+    <style>
+        body {
+            background-color: #111;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            touch-action: none;
+        }
+
+        #game-container {
+            position: relative;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+
+        canvas {
+            background-color: #000;
+            display: block;
+            border-radius: 4px;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .hud-bar {
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 18px;
+            font-weight: bold;
+            text-transform: uppercase;
+            text-shadow: 2px 2px 0 #000;
+        }
+
+        #start-screen, #game-over-screen, #level-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            pointer-events: auto;
+            text-align: center;
+            z-index: 10;
+        }
+
+        h1 {
+            color: #ffcc00;
+            font-size: 48px;
+            margin-bottom: 10px;
+            text-shadow: 4px 4px 0 #b38f00;
+        }
+
+        p {
+            font-size: 18px;
+            line-height: 1.5;
+            color: #ddd;
+            max-width: 80%;
+            margin: 5px 0;
+        }
+
+        .btn {
+            background: #ffcc00;
+            color: #000;
+            border: none;
+            padding: 15px 30px;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 20px;
+            border-radius: 5px;
+            text-transform: uppercase;
+            transition: transform 0.1s;
+            font-family: inherit;
+        }
+
+        .btn:active {
+            transform: scale(0.95);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Leaderboard Styles */
+        #leaderboard-container {
+            margin-top: 20px;
+            width: 80%;
+            max-width: 400px;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .leaderboard-title {
+            color: #ffcc00;
+            border-bottom: 2px solid #ffcc00;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            font-weight: bold;
+        }
+
+        .leaderboard-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+            font-size: 16px;
+        }
+
+        /* Score Input Styles */
+        #score-input-container {
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            align-items: center;
+        }
+
+        #player-name {
+            padding: 10px;
+            font-size: 18px;
+            border-radius: 4px;
+            border: none;
+            text-align: center;
+            font-family: inherit;
+            width: 200px;
+        }
+
+        #mobile-hint {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #888;
+            display: none;
+        }
+        
+        @media (hover: none) and (pointer: coarse) {
+            #mobile-hint { display: block; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="ui-layer">
+        <div class="hud-bar">
+            <span id="score-display">Puan: 0</span>
+            <span id="level-display">Seviye: 1</span>
+        </div>
+        <div class="hud-bar" style="justify-content: center; background: transparent;">
+            <span id="lives-display">Can: 3</span>
+        </div>
+    </div>
+
+    <div id="start-screen">
+        <h1>PAC-MAN</h1>
+        <p>Yön tuşları veya kaydırarak oyna.</p>
+        <div id="mobile-hint">(Oynamak için kaydır)</div>
+        
+        <div id="leaderboard-container">
+            <div class="leaderboard-title">LİDERLİK TABLOSU</div>
+            <div id="leaderboard-list">
+                <p>Yükleniyor...</p>
+            </div>
+        </div>
+
+        <button class="btn" onclick="startGame()">Oyunu Başlat</button>
+    </div>
+
+    <div id="level-screen" class="hidden">
+        <h1 id="level-title">Seviye 1</h1>
+        <p>Hazır Ol!</p>
+    </div>
+
+    <div id="game-over-screen" class="hidden">
+        <h1 style="color: red;">OYUN BİTTİ</h1>
+        <p id="final-score">Puan: 0</p>
+        
+        <div id="score-input-container">
+            <p>Skorunu Kaydet:</p>
+            <input type="text" id="player-name" placeholder="Adın (Max 10 krk)" maxlength="10">
+            <button class="btn" onclick="submitScore()">Kaydet</button>
+        </div>
+        
+        <button class="btn" style="background: #ccc; margin-top: 10px; font-size: 16px;" onclick="resetGame()">Kaydetmeden Geç</button>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    
+    // --- GÜVENLİ CONFIG İÇE AKTARMA ---
+    let firebaseConfig = {};
+    let isFirebaseReady = false;
+    let app, auth, db, currentUser;
+
+    try {
+        // Hosting'e yüklediğinizde 'firebase-config.js' dosyası yanındaki klasörde olmalı.
+        const module = await import('./firebase-config.js');
+        firebaseConfig = module.firebaseConfig;
+        
+        if (firebaseConfig) {
+            app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+            isFirebaseReady = true;
+
+            // Anonim Giriş Yap
+            signInAnonymously(auth).catch((error) => {
+                console.error("Giriş hatası:", error);
+            });
+
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    currentUser = user;
+                    refreshLeaderboard();
+                }
+            });
+        }
+    } catch (e) {
+        console.error("Firebase Config yüklenemedi. 'firebase-config.js' dosyasını kontrol edin.", e);
+        document.getElementById('leaderboard-list').innerHTML = "<p style='color: #ff9999'>Config dosyası bulunamadı.</p>";
+    }
+    // ----------------------------------
+
+    // --- Leaderboard Logic ---
+    async function refreshLeaderboard() {
+        if (!isFirebaseReady || !currentUser) return;
+
+        const listEl = document.getElementById('leaderboard-list');
+        
+        try {
+            const querySnapshot = await getDocs(collection(db, 'leaderboard'));
+            let scores = [];
+            
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                if (data.name && typeof data.score === 'number') {
+                    scores.push(data);
+                }
+            });
+
+            // Büyükten küçüğe sırala
+            scores.sort((a, b) => b.score - a.score);
+            
+            // İlk 10'u al
+            scores = scores.slice(0, 10);
+
+            if (scores.length === 0) {
+                listEl.innerHTML = '<p>Henüz skor yok.</p>';
+            } else {
+                listEl.innerHTML = scores.map((s, i) => `
+                    <div class="leaderboard-item">
+                        <span>${i+1}. ${escapeHtml(s.name)}</span>
+                        <span>${s.score}</span>
+                    </div>
+                `).join('');
+            }
+
+        } catch (e) {
+            console.error("Leaderboard fetch error:", e);
+            listEl.innerHTML = '<p>Bağlantı hatası.</p>';
+        }
+    }
+
+    window.submitScore = async function() {
+        const nameInput = document.getElementById('player-name');
+        let name = nameInput.value.trim();
+        
+        if (!name) {
+            alert("Lütfen bir isim girin!");
+            return;
+        }
+
+        if (!isFirebaseReady) {
+            alert("Firebase ayarları eksik veya yüklenemedi.");
+            return;
+        }
+
+        if (!currentUser) {
+            alert("Bağlantı bekleniyor...");
+            return;
+        }
+
+        const btn = document.querySelector('#game-over-screen .btn');
+        const originalText = btn.innerText;
+        btn.innerText = "Kaydediliyor...";
+        btn.disabled = true;
+
+        try {
+            await addDoc(collection(db, 'leaderboard'), {
+                name: name,
+                score: score,
+                timestamp: Date.now()
+            });
+            
+            resetGame(); 
+            refreshLeaderboard(); 
+
+        } catch (e) {
+            console.error("Save error:", e);
+            alert("Skor kaydedilemedi. (İzin hatası olabilir, Console'u kontrol et)");
+            btn.innerText = originalText;
+            btn.disabled = false;
+        }
+    }
+
+    function escapeHtml(text) {
+        if (!text) return "";
+        return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    // --- Game Logic ---
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Game State
+    let gameState = 'START'; // START, PLAY, LEVEL_TRANSITION, GAMEOVER
+    let score = 0;
+    let lives = 3;
+    let levelIndex = 0;
+    let lastTime = 0;
+
+    // Grid Config
+    const COLS = 19;
+    const ROWS = 21;
+    let TILE_SIZE = 20; 
+    let OFFSET_X = 0;
+    let OFFSET_Y = 0;
+
+    // Entities
+    let pacman;
+    let ghosts = [];
+    let map = []; 
+
+    // Inputs
+    let currentDir = { x: 0, y: 0 }; 
+    let nextDir = { x: 0, y: 0 }; 
+
+    // Maps
+    const LEVEL_LAYOUTS = [
+        [
+            "1111111111111111111",
+            "1222222221222222221",
+            "13111.1121211.11131",
+            "12111.1121211.11121",
+            "1222222222222222221",
+            "1211121211121211121",
+            "1222221221221222221",
+            "1111121101011211111",
+            "0000121009001210000",
+            "1111121099901211111",
+            "2222220099900222222",
+            "1111121099901211111",
+            "0000121000001210000",
+            "1111121211121211111",
+            "1222222221222222221",
+            "1211121121211211121",
+            "132212222P222212231",
+            "1122121111111212211",
+            "1222222222222222221",
+            "1111111111111111111"
+        ],
+        [
+            "1111111111111111111",
+            "1222221222221222221",
+            "1211121211121211121",
+            "1322222221222222231",
+            "1112111121211112111",
+            "1222100000000012221",
+            "1211101114111011121",
+            "1222201999991022221",
+            "1111101999991011111",
+            "0000000009000000000",
+            "1111101111111011111",
+            "122220222P222022221",
+            "1211121112111211121",
+            "1222222222222222221",
+            "1211111112111111121",
+            "1322222222222222231",
+            "1111111111111111111"
+        ],
+        [
+            "1111111111111111111",
+            "1222122221222212221",
+            "1212121121211212121",
+            "1212222222222222121",
+            "1211111011101111121",
+            "1222222014102222221",
+            "1112111019101112111",
+            "1222100099900012221",
+            "1211101111111011121",
+            "122220222P222022221",
+            "1112121211121212111",
+            "1322121212121212231",
+            "1211122222222211121",
+            "1222221111111222221",
+            "1111111111111111111"
+        ]
+    ];
+
+    const DIR = {
+        UP: { x: 0, y: -1 },
+        DOWN: { x: 0, y: 1 },
+        LEFT: { x: -1, y: 0 },
+        RIGHT: { x: 1, y: 0 },
+        NONE: { x: 0, y: 0 }
+    };
+
+    class Pacman {
+        constructor(x, y) {
+            this.gridPos = { x, y };
+            this.pixelPos = { x: x * TILE_SIZE, y: y * TILE_SIZE };
+            this.dir = DIR.NONE;
+            this.nextDir = DIR.NONE;
+            this.speed = 0.15;
+            this.angle = 0;
+            this.mouthOpen = 0;
+            this.mouthSpeed = 0.2;
+        }
+
+        reset(x, y) {
+            this.gridPos = { x, y };
+            this.pixelPos = { x: x * TILE_SIZE, y: y * TILE_SIZE };
+            this.dir = DIR.NONE;
+            this.nextDir = DIR.NONE;
+            this.angle = 0;
+        }
+
+        update(dt) {
+            if (this.dir === DIR.NONE && this.nextDir !== DIR.NONE) {
+                this.tryMove(this.nextDir);
+            }
+
+            if (this.dir !== DIR.NONE) {
+                let moveStep = this.speed * TILE_SIZE * (dt / 16);
+                this.pixelPos.x += this.dir.x * moveStep;
+                this.pixelPos.y += this.dir.y * moveStep;
+
+                const centerPixel = {
+                    x: this.pixelPos.x + TILE_SIZE/2,
+                    y: this.pixelPos.y + TILE_SIZE/2
+                };
+
+                const currentTile = {
+                    x: Math.floor(centerPixel.x / TILE_SIZE),
+                    y: Math.floor(centerPixel.y / TILE_SIZE)
+                };
+
+                if (currentTile.x !== this.gridPos.x || currentTile.y !== this.gridPos.y) {
+                    // Bounds check
+                    if (currentTile.x >= 0 && currentTile.x < COLS && currentTile.y >= 0 && currentTile.y < ROWS) {
+                        this.gridPos = currentTile;
+                        handleEat(this.gridPos.x, this.gridPos.y);
+
+                        if (this.nextDir !== DIR.NONE && this.nextDir !== this.dir) {
+                            if (isValidMove(this.gridPos.x + this.nextDir.x, this.gridPos.y + this.nextDir.y)) {
+                                this.pixelPos.x = this.gridPos.x * TILE_SIZE;
+                                this.pixelPos.y = this.gridPos.y * TILE_SIZE;
+                                this.dir = this.nextDir;
+                                this.nextDir = DIR.NONE;
+                            }
+                        }
+
+                        if (!isValidMove(this.gridPos.x + this.dir.x, this.gridPos.y + this.dir.y)) {
+                            this.pixelPos.x = this.gridPos.x * TILE_SIZE;
+                            this.pixelPos.y = this.gridPos.y * TILE_SIZE;
+                            this.dir = DIR.NONE;
+                        }
+                    } else {
+                        // Keep within bounds
+                        this.pixelPos.x = this.gridPos.x * TILE_SIZE;
+                        this.pixelPos.y = this.gridPos.y * TILE_SIZE;
+                    }
+                } else {
+                    if (this.nextDir.x === -this.dir.x && this.nextDir.y === -this.dir.y && this.nextDir !== DIR.NONE) {
+                         this.dir = this.nextDir;
+                         this.nextDir = DIR.NONE;
+                    }
+                }
+            }
+
+            this.mouthOpen += this.mouthSpeed;
+            if (this.mouthOpen > 1 || this.mouthOpen < 0) this.mouthSpeed = -this.mouthSpeed;
+            
+            if (this.dir === DIR.RIGHT) this.angle = 0;
+            if (this.dir === DIR.DOWN) this.angle = Math.PI / 2;
+            if (this.dir === DIR.LEFT) this.angle = Math.PI;
+            if (this.dir === DIR.UP) this.angle = -Math.PI / 2;
+        }
+
+        draw() {
+            ctx.save();
+            ctx.translate(OFFSET_X + this.pixelPos.x + TILE_SIZE/2, OFFSET_Y + this.pixelPos.y + TILE_SIZE/2);
+            ctx.rotate(this.angle);
+            
+            const mouthAngle = 0.2 * Math.PI * (0.5 + 0.5 * Math.sin(this.mouthOpen * Math.PI));
+            
+            ctx.fillStyle = '#ffcc00';
+            ctx.beginPath();
+            ctx.arc(0, 0, TILE_SIZE/2 - 2, mouthAngle, 2 * Math.PI - mouthAngle);
+            ctx.lineTo(0, 0);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        tryMove(direction) {
+            if (this.dir === DIR.NONE) {
+                if (isValidMove(this.gridPos.x + direction.x, this.gridPos.y + direction.y)) {
+                    this.dir = direction;
+                    this.nextDir = DIR.NONE;
+                }
+            } else {
+                this.nextDir = direction;
+            }
+        }
+    }
+
+    class Ghost {
+        constructor(x, y, color, type) {
+            this.startPos = { x, y };
+            this.gridPos = { x, y };
+            this.pixelPos = { x: x * TILE_SIZE, y: y * TILE_SIZE };
+            this.color = color;
+            this.type = type;
+            this.dir = DIR.UP;
+            this.speed = 0.1;
+            this.scared = false;
+            this.dead = false;
+            this.scaredTimer = 0;
+        }
+
+        reset() {
+            this.gridPos = { ...this.startPos };
+            this.pixelPos = { x: this.startPos.x * TILE_SIZE, y: this.startPos.y * TILE_SIZE };
+            this.dir = DIR.NONE;
+            this.scared = false;
+            this.dead = false;
+            
+            setTimeout(() => {
+                if(gameState === 'PLAY') this.dir = DIR.UP;
+            }, 1000 + Math.random() * 2000);
+        }
+
+        update(dt) {
+            if (this.dead) {
+                this.reset();
+                return;
+            }
+            
+            if (this.scared) {
+                this.scaredTimer -= dt;
+                if (this.scaredTimer <= 0) this.scared = false;
+            }
+
+            if (this.dir === DIR.NONE) return;
+
+            let moveSpeed = this.speed;
+            if (this.scared) moveSpeed *= 0.6;
+            if (levelIndex > 0) moveSpeed *= (1 + levelIndex * 0.1);
+
+            let moveStep = moveSpeed * TILE_SIZE * (dt / 16);
+            this.pixelPos.x += this.dir.x * moveStep;
+            this.pixelPos.y += this.dir.y * moveStep;
+
+            const centerPixel = {
+                x: this.pixelPos.x + TILE_SIZE/2,
+                y: this.pixelPos.y + TILE_SIZE/2
+            };
+
+            const currentTile = {
+                x: Math.floor(centerPixel.x / TILE_SIZE),
+                y: Math.floor(centerPixel.y / TILE_SIZE)
+            };
+
+            if (currentTile.x !== this.gridPos.x || currentTile.y !== this.gridPos.y) {
+                 if (currentTile.x >= 0 && currentTile.x < COLS && currentTile.y >= 0 && currentTile.y < ROWS) {
+                    this.gridPos = currentTile;
+                    this.pixelPos.x = this.gridPos.x * TILE_SIZE;
+                    this.pixelPos.y = this.gridPos.y * TILE_SIZE;
+                    this.chooseNewDirection();
+                } else {
+                     this.dir = { x: -this.dir.x, y: -this.dir.y };
+                }
+            }
+        }
+
+        chooseNewDirection() {
+            const possibleMoves = [];
+            const options = [DIR.UP, DIR.DOWN, DIR.LEFT, DIR.RIGHT];
+
+            for (let opt of options) {
+                if (opt.x === -this.dir.x && opt.y === -this.dir.y) continue;
+                if (isValidMove(this.gridPos.x + opt.x, this.gridPos.y + opt.y, true)) {
+                    possibleMoves.push(opt);
+                }
+            }
+
+            if (possibleMoves.length === 0) {
+                if (isValidMove(this.gridPos.x - this.dir.x, this.gridPos.y - this.dir.y, true)) {
+                     this.dir = { x: -this.dir.x, y: -this.dir.y };
+                     return;
+                } else {
+                    this.dir = DIR.NONE; 
+                    return;
+                }
+            }
+
+            if (this.scared) {
+                this.dir = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
+            } else {
+                let targetX = pacman.gridPos.x;
+                let targetY = pacman.gridPos.y;
+
+                if (this.type === 2) { 
+                    if (Math.random() > 0.5) {
+                        this.dir = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
+                        return;
+                    }
+                }
+                
+                let bestMove = possibleMoves[0];
+                let minDist = Infinity;
+
+                for (let move of possibleMoves) {
+                    const nextX = this.gridPos.x + move.x;
+                    const nextY = this.gridPos.y + move.y;
+                    const dist = Math.abs(nextX - targetX) + Math.abs(nextY - targetY);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        bestMove = move;
+                    }
+                }
+                this.dir = bestMove;
+            }
+        }
+
+        draw() {
+            const x = OFFSET_X + this.pixelPos.x;
+            const y = OFFSET_Y + this.pixelPos.y;
+            
+            ctx.fillStyle = this.scared ? (this.scaredTimer < 120 && Math.floor(Date.now()/200)%2===0 ? '#fff' : '#00f') : this.color;
+            
+            ctx.beginPath();
+            ctx.arc(x + TILE_SIZE/2, y + TILE_SIZE/2 - 2, TILE_SIZE/2 - 2, Math.PI, 0);
+            ctx.lineTo(x + TILE_SIZE - 2, y + TILE_SIZE);
+            ctx.lineTo(x + TILE_SIZE*0.8, y + TILE_SIZE - 4);
+            ctx.lineTo(x + TILE_SIZE*0.6, y + TILE_SIZE);
+            ctx.lineTo(x + TILE_SIZE*0.4, y + TILE_SIZE - 4);
+            ctx.lineTo(x + TILE_SIZE*0.2, y + TILE_SIZE);
+            ctx.lineTo(x + 2, y + TILE_SIZE);
+            ctx.fill();
+
+            if (!this.scared) {
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(x + TILE_SIZE*0.35, y + TILE_SIZE*0.4, TILE_SIZE*0.15, 0, Math.PI * 2);
+                ctx.arc(x + TILE_SIZE*0.65, y + TILE_SIZE*0.4, TILE_SIZE*0.15, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.fillStyle = '#000';
+                let pupilX = this.dir.x * 2;
+                let pupilY = this.dir.y * 2;
+                ctx.beginPath();
+                ctx.arc(x + TILE_SIZE*0.35 + pupilX, y + TILE_SIZE*0.4 + pupilY, TILE_SIZE*0.06, 0, Math.PI * 2);
+                ctx.arc(x + TILE_SIZE*0.65 + pupilX, y + TILE_SIZE*0.4 + pupilY, TILE_SIZE*0.06, 0, Math.PI * 2);
+                ctx.fill();
+            } else {
+                ctx.fillStyle = '#ffb8ae';
+                ctx.fillRect(x + TILE_SIZE*0.3, y + TILE_SIZE*0.5, TILE_SIZE*0.1, TILE_SIZE*0.1);
+                ctx.fillRect(x + TILE_SIZE*0.6, y + TILE_SIZE*0.5, TILE_SIZE*0.1, TILE_SIZE*0.1);
+                ctx.fillRect(x + TILE_SIZE*0.3, y + TILE_SIZE*0.7, TILE_SIZE*0.4, TILE_SIZE*0.05);
+            }
+        }
+    }
+
+    // Global Functions for HTML Access
+    window.startGame = function() {
+        score = 0;
+        lives = 3;
+        levelIndex = 0;
+        document.getElementById('score-display').innerText = `Puan: ${score}`;
+        document.getElementById('lives-display').innerText = `Can: ${lives}`;
+        document.getElementById('start-screen').classList.add('hidden');
+        document.getElementById('game-over-screen').classList.add('hidden');
+        
+        loadLevel(0);
+        startLevel();
+    }
+
+    window.resetGame = function() {
+        document.getElementById('start-screen').classList.remove('hidden');
+        document.getElementById('game-over-screen').classList.add('hidden');
+        refreshLeaderboard();
+        
+        // Reset inputs
+        const btn = document.querySelector('#game-over-screen .btn');
+        if(btn) {
+             btn.innerText = "Kaydet";
+             btn.disabled = false;
+        }
+        document.getElementById('player-name').value = "";
+    }
+
+    function initGame() {
+        resizeCanvas();
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+        });
+
+        document.addEventListener('keydown', handleKey);
+        
+        let touchStartX = 0;
+        let touchStartY = 0;
+        document.addEventListener('touchstart', e => {
+            if (e.changedTouches && e.changedTouches.length > 0 && e.changedTouches[0]) {
+                touchStartX = e.changedTouches[0].screenX;
+                touchStartY = e.changedTouches[0].screenY;
+            }
+        }, {passive: false});
+        
+        document.addEventListener('touchmove', e => {
+            e.preventDefault(); 
+        }, {passive: false});
+
+        document.addEventListener('touchend', e => {
+            if (e.changedTouches && e.changedTouches.length > 0 && e.changedTouches[0]) {
+                let touchEndX = e.changedTouches[0].screenX;
+                let touchEndY = e.changedTouches[0].screenY;
+                handleSwipe(touchStartX, touchStartY, touchEndX, touchEndY);
+            }
+        });
+
+        loadLevel(0);
+        gameLoop();
+    }
+
+    function resizeCanvas() {
+        const maxWidth = window.innerWidth;
+        const maxHeight = window.innerHeight;
+        const hudHeight = 60; 
+        const availableHeight = maxHeight - hudHeight;
+        const aspect = COLS / ROWS;
+        
+        if (maxWidth / availableHeight < aspect) {
+            TILE_SIZE = Math.floor(maxWidth / COLS);
+        } else {
+            TILE_SIZE = Math.floor(availableHeight / ROWS);
+        }
+        TILE_SIZE = Math.max(10, TILE_SIZE);
+
+        canvas.width = COLS * TILE_SIZE;
+        canvas.height = ROWS * TILE_SIZE;
+
+        OFFSET_X = 0;
+        OFFSET_Y = 0;
+
+        if (pacman) {
+            pacman.pixelPos.x = pacman.gridPos.x * TILE_SIZE;
+            pacman.pixelPos.y = pacman.gridPos.y * TILE_SIZE;
+        }
+        if (ghosts.length > 0) {
+            ghosts.forEach(g => {
+                g.pixelPos.x = g.gridPos.x * TILE_SIZE;
+                g.pixelPos.y = g.gridPos.y * TILE_SIZE;
+            });
+        }
+    }
+
+    function loadLevel(idx) {
+        levelIndex = idx;
+        if (levelIndex >= LEVEL_LAYOUTS.length) levelIndex = 0; 
+
+        document.getElementById('level-display').innerText = `Seviye: ${levelIndex + 1}`;
+        
+        let layout = LEVEL_LAYOUTS[levelIndex];
+        if (!layout) {
+            levelIndex = 0;
+            layout = LEVEL_LAYOUTS[0];
+        }
+
+        map = [];
+        ghosts = [];
+        let ghostHousePos = { x: 10, y: 10 };
+
+        for (let y = 0; y < ROWS; y++) {
+            let rowStr = layout[y] || "";
+            let rowData = [];
+            for (let x = 0; x < COLS; x++) {
+                let char = rowStr[x] || "1";
+                if (char === 'P') {
+                    pacman = new Pacman(x, y);
+                    rowData.push({ type: 0 }); 
+                } else if (char === '9') {
+                    rowData.push({ type: 9 }); 
+                    ghostHousePos = { x, y }; 
+                } else if (char === '4') {
+                    rowData.push({ type: 4 }); 
+                } else if (char === '1') {
+                    rowData.push({ type: 1 }); 
+                } else if (char === '2') {
+                    rowData.push({ type: 2, active: true }); 
+                } else if (char === '3') {
+                    rowData.push({ type: 3, active: true }); 
+                } else {
+                    rowData.push({ type: 0 }); 
+                }
+            }
+            map.push(rowData);
+        }
+
+        ghosts.push(new Ghost(ghostHousePos.x, ghostHousePos.y-2, 'red', 0));
+        ghosts.push(new Ghost(ghostHousePos.x-1, ghostHousePos.y, 'pink', 0));
+        ghosts.push(new Ghost(ghostHousePos.x+1, ghostHousePos.y, '#00ffff', 2));
+        if (levelIndex > 0) ghosts.push(new Ghost(ghostHousePos.x, ghostHousePos.y, 'orange', 1));
+    }
+
+    function startLevel() {
+        gameState = 'LEVEL_TRANSITION';
+        document.getElementById('level-title').innerText = `Seviye ${levelIndex + 1}`;
+        document.getElementById('level-screen').classList.remove('hidden');
+        
+        pacman.reset(pacman.gridPos.x, pacman.gridPos.y);
+        ghosts.forEach(g => g.reset());
+
+        setTimeout(() => {
+            document.getElementById('level-screen').classList.add('hidden');
+            gameState = 'PLAY';
+        }, 2000);
+    }
+
+    function handleKey(e) {
+        if (gameState !== 'PLAY') return;
+        
+        switch(e.key) {
+            case 'ArrowUp': pacman.tryMove(DIR.UP); break;
+            case 'ArrowDown': pacman.tryMove(DIR.DOWN); break;
+            case 'ArrowLeft': pacman.tryMove(DIR.LEFT); break;
+            case 'ArrowRight': pacman.tryMove(DIR.RIGHT); break;
+        }
+    }
+
+    function handleSwipe(sx, sy, ex, ey) {
+        if (gameState !== 'PLAY') return;
+        
+        let dx = ex - sx;
+        let dy = ey - sy;
+        
+        if (Math.abs(dx) > Math.abs(dy)) {
+            if (Math.abs(dx) > 30) {
+                if (dx > 0) pacman.tryMove(DIR.RIGHT);
+                else pacman.tryMove(DIR.LEFT);
+            }
+        } else {
+            if (Math.abs(dy) > 30) {
+                if (dy > 0) pacman.tryMove(DIR.DOWN);
+                else pacman.tryMove(DIR.UP);
+            }
+        }
+    }
+
+    function isValidMove(gx, gy, isGhost = false) {
+        if (gx < 0 || gx >= COLS || gy < 0 || gy >= ROWS) return false;
+        
+        if (!map[gy]) return false;
+        
+        const tile = map[gy][gx];
+        if (!tile) return false;
+        
+        if (tile.type === 1) return false; 
+        if (isGhost && tile.type === 4) return true; 
+        if (!isGhost && tile.type === 9) return false; 
+        if (!isGhost && tile.type === 4) return false; 
+
+        return true;
+    }
+
+    function handleEat(gx, gy) {
+        if (gy < 0 || gy >= ROWS || gx < 0 || gx >= COLS) return;
+        if (!map[gy]) return; 
+
+        const tile = map[gy][gx];
+        if (tile && tile.active) {
+            if (tile.type === 2) {
+                score += 10;
+                tile.active = false;
+            } else if (tile.type === 3) {
+                score += 50;
+                tile.active = false;
+                ghosts.forEach(g => {
+                    g.scared = true;
+                    g.scaredTimer = 600; 
+                    g.dir = { x: -g.dir.x, y: -g.dir.y };
+                });
+            }
+            document.getElementById('score-display').innerText = `Puan: ${score}`;
+            checkWin();
+        }
+    }
+
+    function checkWin() {
+        let remaining = 0;
+        for(let r of map) {
+            for(let t of r) {
+                if(t.active && (t.type === 2 || t.type === 3)) remaining++;
+            }
+        }
+        if (remaining === 0) {
+            levelIndex++;
+            if (levelIndex >= LEVEL_LAYOUTS.length) levelIndex = 0; 
+            loadLevel(levelIndex);
+            startLevel();
+        }
+    }
+
+    function handleDeath() {
+        lives--;
+        document.getElementById('lives-display').innerText = `Can: ${lives}`;
+        
+        if (lives <= 0) {
+            gameState = 'GAMEOVER';
+            document.getElementById('final-score').innerText = `Puan: ${score}`;
+            document.getElementById('game-over-screen').classList.remove('hidden');
+        } else {
+            gameState = 'LEVEL_TRANSITION'; 
+            setTimeout(() => {
+                pacman.reset(pacman.gridPos.x, pacman.gridPos.y); 
+                let pStart = {x: 1, y: 1};
+                const layout = LEVEL_LAYOUTS[levelIndex];
+                if (layout) {
+                    for(let y=0; y<ROWS; y++) {
+                        let rowStr = layout[y] || "";
+                        for(let x=0; x<COLS; x++) {
+                            if (rowStr[x] === 'P') pStart = {x, y};
+                        }
+                    }
+                }
+                pacman.reset(pStart.x, pStart.y);
+                ghosts.forEach(g => g.reset());
+                gameState = 'PLAY';
+            }, 1500);
+        }
+    }
+
+    function gameLoop(timestamp) {
+        const dt = timestamp - lastTime;
+        lastTime = timestamp;
+
+        if (gameState === 'PLAY') {
+            update(dt);
+        }
+        draw();
+
+        requestAnimationFrame(gameLoop);
+    }
+
+    function update(dt) {
+        if (dt > 50) dt = 50;
+
+        pacman.update(dt);
+        
+        ghosts.forEach(g => {
+            g.update(dt);
+            
+            const dx = pacman.pixelPos.x - g.pixelPos.x;
+            const dy = pacman.pixelPos.y - g.pixelPos.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            
+            if (dist < TILE_SIZE * 0.8) {
+                if (g.scared) {
+                    g.dead = true;
+                    g.scared = false;
+                    score += 200;
+                    g.reset(); 
+                } else {
+                    handleDeath();
+                }
+            }
+        });
+    }
+
+    function draw() {
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        if (!pacman) return; 
+
+        for (let y = 0; y < ROWS; y++) {
+            for (let x = 0; x < COLS; x++) {
+                if (!map[y]) continue; 
+                const tile = map[y][x];
+                if (!tile) continue;
+
+                const px = x * TILE_SIZE;
+                const py = y * TILE_SIZE;
+                
+                if (tile.type === 1) {
+                    ctx.strokeStyle = '#2121de';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(px + 4, py + 4, TILE_SIZE - 8, TILE_SIZE - 8);
+                } else if (tile.type === 9 || tile.type === 4) {
+                     if (tile.type === 4) {
+                         ctx.fillStyle = '#ffb8ae';
+                         ctx.fillRect(px, py + TILE_SIZE/2 - 2, TILE_SIZE, 4);
+                     }
+                }
+                
+                if (tile.active) {
+                    if (tile.type === 2) { 
+                        ctx.fillStyle = '#ffb8ae';
+                        ctx.beginPath();
+                        ctx.arc(px + TILE_SIZE/2, py + TILE_SIZE/2, 2, 0, Math.PI*2);
+                        ctx.fill();
+                    } else if (tile.type === 3) { 
+                        if (Math.floor(Date.now() / 200) % 2 === 0) {
+                            ctx.fillStyle = '#ffb8ae';
+                            ctx.beginPath();
+                            ctx.arc(px + TILE_SIZE/2, py + TILE_SIZE/2, 6, 0, Math.PI*2);
+                            ctx.fill();
+                        }
+                    }
+                }
+            }
+        }
+
+        pacman.draw();
+        ghosts.forEach(g => g.draw());
+    }
+
+    initGame();
+</script>
+</body>
+</html>
