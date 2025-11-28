@@ -2,6 +2,10 @@
 
 HTML5 Canvas, JavaScript ve Firebase kullanılarak geliştirilmiş; liderlik tablosu, çoklu seviyeler ve mobil uyumluluk içeren modern bir Pac-Man klonu.
 
+> 🕹️ [OYUNU CANLI OYNA](https://pacman-game-rose.vercel.app/) 🕹️
+
+Tıklayın ve hemen tarayıcınızda oynayın!
+
 ---
 
 # 🎮 Özellikler
