@@ -390,7 +390,7 @@
         return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
 
-    // --- SOUND MANAGER (Web Audio API) ---
+    // --- SOUND MANAGER ---
     class SoundManager {
         constructor() {
             this.ctx = null;
@@ -403,7 +403,7 @@
                 this.ctx = new (window.AudioContext || window.webkitAudioContext)();
                 this.masterGain = this.ctx.createGain();
                 this.masterGain.connect(this.ctx.destination);
-                this.masterGain.gain.value = 0.3; // Genel ses seviyesi
+                this.masterGain.gain.value = 0.3; 
                 this.enabled = true;
                 this.updateButton();
             } else if (this.ctx.state === 'suspended') {
@@ -427,7 +427,6 @@
             btn.innerText = this.enabled ? '🔊' : '🔇';
         }
 
-        // Helper: Play a simple oscillator tone
         playTone(freq, type, duration, startTime = 0) {
             if (!this.enabled || !this.ctx) return;
             const osc = this.ctx.createOscillator();
@@ -445,7 +444,6 @@
 
         playWaka() {
             if (!this.enabled || !this.ctx) return;
-            // Waka-Waka: Kısa, periyodik değişen frekanslar
             const now = this.ctx.currentTime;
             const osc = this.ctx.createOscillator();
             const gain = this.ctx.createGain();
@@ -466,15 +464,13 @@
 
         playEatGhost() {
             if (!this.enabled || !this.ctx) return;
-            // High pitched blip
             this.playTone(800, 'square', 0.1);
             this.playTone(1200, 'square', 0.1, 0.1);
         }
 
         playIntro() {
             if (!this.enabled || !this.ctx) return;
-            // Simple arpeggio
-            const notes = [261, 523, 392, 349, 329, 293, 261]; // C4, C5, G4...
+            const notes = [261, 523, 392, 349, 329, 293, 261]; 
             notes.forEach((freq, i) => {
                 this.playTone(freq, 'square', 0.15, i * 0.15);
             });
@@ -482,7 +478,6 @@
 
         playDeath() {
             if (!this.enabled || !this.ctx) return;
-            // Downward sweep
             const now = this.ctx.currentTime;
             const osc = this.ctx.createOscillator();
             const gain = this.ctx.createGain();
@@ -508,30 +503,25 @@
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
 
-    // Game State
     let gameState = 'START'; 
     let score = 0;
     let lives = 3;
     let levelIndex = 0;
     let lastTime = 0;
 
-    // Grid Config
     const COLS = 19;
     const ROWS = 21;
     let TILE_SIZE = 20; 
     let OFFSET_X = 0;
     let OFFSET_Y = 0;
 
-    // Entities
     let pacman;
     let ghosts = [];
     let map = []; 
 
-    // Inputs
     let currentDir = { x: 0, y: 0 }; 
     let nextDir = { x: 0, y: 0 }; 
 
-    // Maps
     const LEVEL_LAYOUTS = [
         [
             "1111111111111111111",
@@ -622,6 +612,13 @@
         }
 
         update(dt) {
+            // Tünel / Wrap-around
+            if (this.pixelPos.x < -TILE_SIZE / 2) {
+                this.pixelPos.x = canvas.width + TILE_SIZE / 2;
+            } else if (this.pixelPos.x > canvas.width + TILE_SIZE / 2) {
+                this.pixelPos.x = -TILE_SIZE / 2;
+            }
+
             if (this.dir === DIR.NONE && this.nextDir !== DIR.NONE) {
                 this.tryMove(this.nextDir);
             }
@@ -641,32 +638,30 @@
                     y: Math.floor(centerPixel.y / TILE_SIZE)
                 };
 
+                // Grid değiştiğinde (veya sınırdan tünele geçtiğinde)
                 if (currentTile.x !== this.gridPos.x || currentTile.y !== this.gridPos.y) {
-                    // Bounds check
-                    if (currentTile.x >= 0 && currentTile.x < COLS && currentTile.y >= 0 && currentTile.y < ROWS) {
-                        this.gridPos = currentTile;
-                        handleEat(this.gridPos.x, this.gridPos.y);
+                    this.gridPos = currentTile; // Güncelle
+                    handleEat(this.gridPos.x, this.gridPos.y);
 
-                        if (this.nextDir !== DIR.NONE && this.nextDir !== this.dir) {
-                            if (isValidMove(this.gridPos.x + this.nextDir.x, this.gridPos.y + this.nextDir.y)) {
-                                this.pixelPos.x = this.gridPos.x * TILE_SIZE;
-                                this.pixelPos.y = this.gridPos.y * TILE_SIZE;
-                                this.dir = this.nextDir;
-                                this.nextDir = DIR.NONE;
-                            }
-                        }
-
-                        if (!isValidMove(this.gridPos.x + this.dir.x, this.gridPos.y + this.dir.y)) {
+                    // 1. Yeni yön (nextDir) varsa ve geçerliyse dön
+                    if (this.nextDir !== DIR.NONE && this.nextDir !== this.dir) {
+                        if (isValidMove(this.gridPos.x + this.nextDir.x, this.gridPos.y + this.nextDir.y)) {
                             this.pixelPos.x = this.gridPos.x * TILE_SIZE;
                             this.pixelPos.y = this.gridPos.y * TILE_SIZE;
-                            this.dir = DIR.NONE;
+                            this.dir = this.nextDir;
+                            this.nextDir = DIR.NONE;
                         }
-                    } else {
-                        // Keep within bounds
+                    }
+
+                    // 2. Eğer şu anki yönde önü kapalıysa (duvar), dur.
+                    if (!isValidMove(this.gridPos.x + this.dir.x, this.gridPos.y + this.dir.y)) {
                         this.pixelPos.x = this.gridPos.x * TILE_SIZE;
                         this.pixelPos.y = this.gridPos.y * TILE_SIZE;
+                        this.dir = DIR.NONE;
                     }
+                    // Aksi takdirde (önü açıksa) durma, devam et.
                 } else {
+                    // Aynı kare içindeyken tam zıt yöne anında dönüş izni
                     if (this.nextDir.x === -this.dir.x && this.nextDir.y === -this.dir.y && this.nextDir !== DIR.NONE) {
                          this.dir = this.nextDir;
                          this.nextDir = DIR.NONE;
@@ -747,6 +742,13 @@
                 if (this.scaredTimer <= 0) this.scared = false;
             }
 
+            // Tünel / Wrap-around (Hayaletler için de)
+            if (this.pixelPos.x < -TILE_SIZE / 2) {
+                this.pixelPos.x = canvas.width + TILE_SIZE / 2;
+            } else if (this.pixelPos.x > canvas.width + TILE_SIZE / 2) {
+                this.pixelPos.x = -TILE_SIZE / 2;
+            }
+
             if (this.dir === DIR.NONE) return;
 
             let moveSpeed = this.speed;
@@ -768,13 +770,19 @@
             };
 
             if (currentTile.x !== this.gridPos.x || currentTile.y !== this.gridPos.y) {
-                 if (currentTile.x >= 0 && currentTile.x < COLS && currentTile.y >= 0 && currentTile.y < ROWS) {
-                    this.gridPos = currentTile;
-                    this.pixelPos.x = this.gridPos.x * TILE_SIZE;
-                    this.pixelPos.y = this.gridPos.y * TILE_SIZE;
-                    this.chooseNewDirection();
+                this.gridPos = currentTile;
+                // Snap yapmıyoruz ki tünelde akıcı geçsin, sadece yön kontrolü:
+                
+                // Eğer tünel dışındaysa (normal harita içi) snap yapılabilir ama
+                // akıcılık için pixelPos'a dokunmayalım, sadece yön seçelim.
+                
+                // Yalnızca harita sınırları içindeyken yön değiştirsin (tünelde dönmesin)
+                if (currentTile.x >= 0 && currentTile.x < COLS && currentTile.y >= 0 && currentTile.y < ROWS) {
+                     this.pixelPos.x = this.gridPos.x * TILE_SIZE; // Hafif snap
+                     this.pixelPos.y = this.gridPos.y * TILE_SIZE;
+                     this.chooseNewDirection();
                 } else {
-                     this.dir = { x: -this.dir.x, y: -this.dir.y };
+                     // Tünelde dümdüz gitmeye devam etsin (yönü değiştirme)
                 }
             }
         }
@@ -1058,15 +1066,21 @@
     }
 
     function isValidMove(gx, gy, isGhost = false) {
-        if (gx < 0 || gx >= COLS || gy < 0 || gy >= ROWS) return false;
+        // Tünel izni: Harita sınırlarının dışına (sadece X ekseninde) izin ver
+        if (gx < 0 || gx >= COLS) {
+            return true;
+        }
+
+        // Dikey sınırlar kesin kural
+        if (gy < 0 || gy >= ROWS) return false;
         
         if (!map[gy]) return false;
         
         const tile = map[gy][gx];
         if (!tile) return false;
         
-        if (tile.type === 1) return false; 
-        if (isGhost && tile.type === 4) return true; 
+        if (tile.type === 1) return false; // Duvar
+        if (isGhost && tile.type === 4) return true; // Hayaletler kapıdan geçer
         if (!isGhost && tile.type === 9) return false; 
         if (!isGhost && tile.type === 4) return false; 
 
